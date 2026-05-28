@@ -1,0 +1,3 @@
+[console_scripts]
+mock_scan_publisher = macademia_nav.mock_scan_publisher:main
+orchard_navigation = macademia_nav.orchard_navigation:main

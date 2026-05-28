@@ -1,0 +1,24 @@
+running egg_info
+writing build/macademia_nav/macademia_nav.egg-info/PKG-INFO
+writing dependency_links to build/macademia_nav/macademia_nav.egg-info/dependency_links.txt
+writing entry points to build/macademia_nav/macademia_nav.egg-info/entry_points.txt
+writing requirements to build/macademia_nav/macademia_nav.egg-info/requires.txt
+writing top-level names to build/macademia_nav/macademia_nav.egg-info/top_level.txt
+reading manifest file 'build/macademia_nav/macademia_nav.egg-info/SOURCES.txt'
+writing manifest file 'build/macademia_nav/macademia_nav.egg-info/SOURCES.txt'
+running build
+running build_py
+copying macademia_nav/mock_scan_publisher.py -> /home/rmitaiil/macademia_nav/build/macademia_nav/build/lib/macademia_nav
+running install
+running install_lib
+copying /home/rmitaiil/macademia_nav/build/macademia_nav/build/lib/macademia_nav/mock_scan_publisher.py -> /home/rmitaiil/macademia_nav/install/macademia_nav/lib/python3.12/site-packages/macademia_nav
+byte-compiling /home/rmitaiil/macademia_nav/install/macademia_nav/lib/python3.12/site-packages/macademia_nav/mock_scan_publisher.py to mock_scan_publisher.cpython-312.pyc
+running install_data
+Sorry: IndentationError: expected an indented block after function definition on line 16 (mock_scan_publisher.py, line 17)
+running install_egg_info
+removing '/home/rmitaiil/macademia_nav/install/macademia_nav/lib/python3.12/site-packages/macademia_nav-0.0.0-py3.12.egg-info' (and everything under it)
+Copying build/macademia_nav/macademia_nav.egg-info to /home/rmitaiil/macademia_nav/install/macademia_nav/lib/python3.12/site-packages/macademia_nav-0.0.0-py3.12.egg-info
+running install_scripts
+Installing mock_scan_publisher script to /home/rmitaiil/macademia_nav/install/macademia_nav/lib/macademia_nav
+Installing orchard_navigation script to /home/rmitaiil/macademia_nav/install/macademia_nav/lib/macademia_nav
+writing list of installed files to '/home/rmitaiil/macademia_nav/build/macademia_nav/install.log'

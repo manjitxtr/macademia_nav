@@ -1,0 +1,25 @@
+[0.295s] Invoking command in '/home/rmitaiil/macademia_nav': DEBUGINFOD_URLS=https://debuginfod.ubuntu.com PYTHONPATH=/home/rmitaiil/macademia_nav/build/macademia_nav/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/rmitaiil/macademia_nav/install/macademia_nav/lib/python3.12/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base build/macademia_nav build --build-base /home/rmitaiil/macademia_nav/build/macademia_nav/build install --record /home/rmitaiil/macademia_nav/build/macademia_nav/install.log --single-version-externally-managed install_data
+[0.391s] running egg_info
+[0.397s] writing build/macademia_nav/macademia_nav.egg-info/PKG-INFO
+[0.398s] writing dependency_links to build/macademia_nav/macademia_nav.egg-info/dependency_links.txt
+[0.398s] writing entry points to build/macademia_nav/macademia_nav.egg-info/entry_points.txt
+[0.398s] writing requirements to build/macademia_nav/macademia_nav.egg-info/requires.txt
+[0.398s] writing top-level names to build/macademia_nav/macademia_nav.egg-info/top_level.txt
+[0.411s] reading manifest file 'build/macademia_nav/macademia_nav.egg-info/SOURCES.txt'
+[0.411s] writing manifest file 'build/macademia_nav/macademia_nav.egg-info/SOURCES.txt'
+[0.411s] running build
+[0.412s] running build_py
+[0.412s] copying macademia_nav/mock_scan_publisher.py -> /home/rmitaiil/macademia_nav/build/macademia_nav/build/lib/macademia_nav
+[0.412s] running install
+[0.415s] running install_lib
+[0.422s] copying /home/rmitaiil/macademia_nav/build/macademia_nav/build/lib/macademia_nav/mock_scan_publisher.py -> /home/rmitaiil/macademia_nav/install/macademia_nav/lib/python3.12/site-packages/macademia_nav
+[0.422s] byte-compiling /home/rmitaiil/macademia_nav/install/macademia_nav/lib/python3.12/site-packages/macademia_nav/mock_scan_publisher.py to mock_scan_publisher.cpython-312.pyc
+[0.423s] running install_data
+[0.423s] running install_egg_info
+[0.430s] removing '/home/rmitaiil/macademia_nav/install/macademia_nav/lib/python3.12/site-packages/macademia_nav-0.0.0-py3.12.egg-info' (and everything under it)
+[0.431s] Copying build/macademia_nav/macademia_nav.egg-info to /home/rmitaiil/macademia_nav/install/macademia_nav/lib/python3.12/site-packages/macademia_nav-0.0.0-py3.12.egg-info
+[0.431s] running install_scripts
+[0.476s] Installing mock_scan_publisher script to /home/rmitaiil/macademia_nav/install/macademia_nav/lib/macademia_nav
+[0.476s] Installing orchard_navigation script to /home/rmitaiil/macademia_nav/install/macademia_nav/lib/macademia_nav
+[0.476s] writing list of installed files to '/home/rmitaiil/macademia_nav/build/macademia_nav/install.log'
+[0.488s] Invoked command in '/home/rmitaiil/macademia_nav' returned '0': DEBUGINFOD_URLS=https://debuginfod.ubuntu.com PYTHONPATH=/home/rmitaiil/macademia_nav/build/macademia_nav/prefix_override:/usr/lib/python3/dist-packages/colcon_core/task/python/colcon_distutils_commands:/home/rmitaiil/macademia_nav/install/macademia_nav/lib/python3.12/site-packages:${PYTHONPATH} /usr/bin/python3 -W ignore:setup.py install is deprecated -W ignore:easy_install command is deprecated setup.py egg_info --egg-base build/macademia_nav build --build-base /home/rmitaiil/macademia_nav/build/macademia_nav/build install --record /home/rmitaiil/macademia_nav/build/macademia_nav/install.log --single-version-externally-managed install_data

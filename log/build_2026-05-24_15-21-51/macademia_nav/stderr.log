@@ -1,0 +1,5 @@
+  File "/home/rmitaiil/macademia_nav/install/macademia_nav/lib/python3.12/site-packages/macademia_nav/mock_scan_publisher.py", line 22
+    .angle_increment = 6.28 / 360
+    ^
+SyntaxError: invalid syntax
+
