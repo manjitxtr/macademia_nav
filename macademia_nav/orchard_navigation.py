@@ -26,63 +26,56 @@ class OrchardNavigator(Node):
     Layered architecture orchard navigator for ROSbot Pro.
     Serpentine (boustrophedon) coverage pattern.
 
-    ── Quick-config block ─────────────────────────────────────────────
-    Change only these values before each demo run:
-      NUM_LANES         — how many lanes to cover
-      NUM_TREES_PER_ROW — reduce if lab space is tight (min 2)
-      TREE_SPACING      — measured distance between tree centres (m)
-      LANE_WIDTH        — measured distance between lane centres (m)
-    Everything else auto-calculates from these four.
+    ── Quick-config ───────────────────────────────────────────────────
+    NUM_LANES         — how many lanes to cover
+    NUM_TREES_PER_ROW — reduce if lab space is tight (min 2)
+    TREE_SPACING      — measured distance between tree centres (m)
+    LANE_WIDTH        — measured distance between lane centres (m)
     ───────────────────────────────────────────────────────────────────
     """
 
     # ── Quick-config ───────────────────────────────────────────────── #
     NUM_LANES         = 3
-    NUM_TREES_PER_ROW = 3      # drop to 3 or 2 if space is tight
-    TREE_SPACING      = 0.75    # metres between tree centres in a row
-    LANE_WIDTH        = 1.0    # metres between lane centres
+    NUM_TREES_PER_ROW = 3
+    TREE_SPACING      = 0.75
+    LANE_WIDTH        = 0.95
 
     # ── Speeds ────────────────────────────────────────────────────── #
-    FORWARD_SPEED     = 0.08    # m/s along lane
-    TURN_SPEED        = 0.25    # rad/s in-place rotation
-    CROSS_SPEED       = 0.06    # m/s crossing headland
+    FORWARD_SPEED     = 0.08
+    TURN_SPEED        = 0.25
+    CROSS_SPEED       = 0.06
 
     # ── Row-end detection ─────────────────────────────────────────── #
-    ROW_END_OPEN_DIST = 1.0     # both sides must open beyond this (m)
-    ROW_END_CONFIRM   = 0.5     # seconds both sides must stay open
+    ROW_END_OPEN_DIST = 1.10
+    ROW_END_CONFIRM   = 0.30
+    ROW_END_MIN_TIME  = 3.0     # seconds — never trigger in first 3s of lane
 
     # ── Straight-line heading hold ────────────────────────────────── #
     HEADING_GAIN      = 0.8
-    MAX_HEADING_CORR  = 0.30    # rad/s max correction
+    MAX_HEADING_CORR  = 0.30
 
     # ── Reactive thresholds ───────────────────────────────────────── #
-    FRONT_STOP_LANE   = 0.25    # stop distance during lane following
-    FRONT_STOP_CROSS  = 0.20    # stop distance during headland moves
-    SIDE_DANGER_DIST  = 0.18    # hard steer if side closer than this
-    SIDE_SLOW_DIST    = 0.30    # slow to 50% if side closer than this
+    FRONT_STOP_LANE   = 0.25
+    FRONT_STOP_CROSS  = 0.20
+    SIDE_DANGER_DIST  = 0.18
+    SIDE_SLOW_DIST    = 0.30
 
-    # ── Lane centering (secondary, gentle) ────────────────────────── #
+    # ── Lane centering ────────────────────────────────────────────── #
     CENTER_GAIN       = 0.04
     CENTER_DEADBAND   = 0.15
+    CENTER_START_DIST = 0.30    # don't centre until this far in
 
     # ── Headland geometry ─────────────────────────────────────────── #
-    CLEAR_DIST        = 0.30    # drive past last tree before turning
-    TURN_TOLERANCE    = 0.08    # radians — close enough to target yaw
+    CLEAR_DIST        = 0.30
+    TURN_TOLERANCE    = 0.08
 
-    # ── Auto-calculated from quick-config ─────────────────────────── #
     @property
     def row_length(self):
-        """Total row length based on tree count and spacing."""
         return self.NUM_TREES_PER_ROW * self.TREE_SPACING
 
     @property
     def lane_min_dist(self):
-        """
-        Minimum distance before row-end can trigger.
-        60% of row length — robot must be well into the row
-        before both-sides-open detection activates.
-        """
-        return self.row_length * 0.60
+        return self.row_length * 0.75
 
     def __init__(self):
         super().__init__("orchard_navigator")
@@ -116,6 +109,7 @@ class OrchardNavigator(Node):
         self.cross_heading      = None
         self.lane_start_x       = 0.0
         self.lane_start_y       = 0.0
+        self.lane_start_time    = self.get_clock().now()  # time guard
         self.row_end_open_since = None
         self.turn_target_yaw    = None
         self.headland_start_x   = 0.0
@@ -127,8 +121,8 @@ class OrchardNavigator(Node):
         self.get_logger().info(
             f"Orchard navigator ready — "
             f"{self.NUM_LANES} lanes x {self.NUM_TREES_PER_ROW} trees, "
-            f"row length={self.row_length:.2f}m, "
-            f"min trigger dist={self.lane_min_dist:.2f}m, "
+            f"row={self.row_length:.2f}m "
+            f"trigger@{self.lane_min_dist:.2f}m "
             f"lane width={self.LANE_WIDTH}m.")
 
     # ================================================================== #
@@ -203,6 +197,9 @@ class OrchardNavigator(Node):
     def state_elapsed(self):
         return (self.get_clock().now() - self.state_start_time).nanoseconds / 1e9
 
+    def lane_elapsed(self):
+        return (self.get_clock().now() - self.lane_start_time).nanoseconds / 1e9
+
     def dist_from(self, x, y):
         return math.hypot(self.current_x - x, self.current_y - y)
 
@@ -260,6 +257,12 @@ class OrchardNavigator(Node):
                     self.right_dist < self.SIDE_SLOW_DIST):
                 speed *= 0.5
 
+            # Slow near row end for cleaner detection
+            dist = self.dist_from(self.lane_start_x, self.lane_start_y)
+            if dist > self.row_length * 0.80:
+                speed *= 0.6
+
+        # Primary: yaw hold
         heading_corr = 0.0
         if heading is not None:
             err = yaw_error(heading, self.current_yaw)
@@ -267,23 +270,30 @@ class OrchardNavigator(Node):
                                min(self.MAX_HEADING_CORR,
                                    self.HEADING_GAIN * err))
 
+        # Secondary: LiDAR centering — delayed until CENTER_START_DIST
         center_corr = 0.0
         if self.state == "FOLLOW_LANE":
-            side_diff = self.left_dist - self.right_dist
-            if abs(side_diff) > self.CENTER_DEADBAND:
-                center_corr = max(-0.08, min(0.08,
-                                             -side_diff * self.CENTER_GAIN))
+            dist = self.dist_from(self.lane_start_x, self.lane_start_y)
+            if dist > self.CENTER_START_DIST:
+                side_diff = self.left_dist - self.right_dist
+                if abs(side_diff) > self.CENTER_DEADBAND:
+                    center_corr = max(-0.08, min(0.08,
+                                                 -side_diff * self.CENTER_GAIN))
 
         cmd.twist.linear.x  = speed
         cmd.twist.angular.z = heading_corr + center_corr
 
     def row_end_detected(self):
-        dist_travelled = self.dist_from(self.lane_start_x, self.lane_start_y)
+        # Guard 1: minimum time in lane — prevents false trigger at startup
+        if self.lane_elapsed() < self.ROW_END_MIN_TIME:
+            return False
 
-        # Must travel at least lane_min_dist (auto-calculated from tree count)
+        # Guard 2: minimum distance travelled in THIS lane
+        dist_travelled = self.dist_from(self.lane_start_x, self.lane_start_y)
         if dist_travelled < self.lane_min_dist:
             return False
 
+        # Guard 3: both sides open simultaneously
         both_open = (self.left_dist  > self.ROW_END_OPEN_DIST and
                      self.right_dist > self.ROW_END_OPEN_DIST)
 
@@ -297,6 +307,7 @@ class OrchardNavigator(Node):
                     f"Row end detected — "
                     f"dist={dist_travelled:.2f}m "
                     f"(row={self.row_length:.2f}m) "
+                    f"time={self.lane_elapsed():.1f}s "
                     f"L={self.left_dist:.2f}m R={self.right_dist:.2f}m")
                 return True
         else:
@@ -318,6 +329,7 @@ class OrchardNavigator(Node):
         self.lane_heading       = self.current_yaw
         self.lane_start_x       = self.current_x
         self.lane_start_y       = self.current_y
+        self.lane_start_time    = self.get_clock().now()
         self.row_end_open_since = None
         self.get_logger().info(
             f"Lane {self.lane_number + 1} start — "
@@ -325,14 +337,10 @@ class OrchardNavigator(Node):
             f"pos=({self.current_x:.2f}, {self.current_y:.2f}) "
             f"trees={self.NUM_TREES_PER_ROW} "
             f"row={self.row_length:.2f}m "
-            f"trigger@{self.lane_min_dist:.2f}m")
+            f"trigger@{self.lane_min_dist:.2f}m "
+            f"min_time={self.ROW_END_MIN_TIME}s")
 
     def get_turn_angle(self):
-        """
-        Serpentine pattern:
-        Even lane index (0, 2) -> turn RIGHT (-90deg)
-        Odd  lane index (1, 3) -> turn LEFT  (+90deg)
-        """
         return -math.pi / 2 if self.lane_number % 2 == 0 else math.pi / 2
 
     # ================================================================== #
@@ -362,12 +370,11 @@ class OrchardNavigator(Node):
                     f"F={self.front_dist:.2f} "
                     f"dist={self.dist_from(self.lane_start_x, self.lane_start_y):.2f}/"
                     f"{self.row_length:.2f}m "
-                    f"trigger@{self.lane_min_dist:.2f}m")
+                    f"t={self.lane_elapsed():.1f}s")
 
             if self.row_end_detected():
                 self.headland_start_x = self.current_x
                 self.headland_start_y = self.current_y
-                # If this was the last lane, stop here — no headland needed
                 if self.lane_number >= self.NUM_LANES - 1:
                     self.set_state("MISSION_COMPLETE")
                 else:
@@ -435,9 +442,14 @@ class OrchardNavigator(Node):
             self.stop()
             total = (self.get_clock().now() -
                      self.mission_start).nanoseconds / 1e9
-            self.get_logger().info(
-                f"Mission complete — {self.NUM_LANES} lanes x "
-                f"{self.NUM_TREES_PER_ROW} trees covered in {total:.1f}s.")
+            self.get_logger().info("=" * 50)
+            self.get_logger().info("MISSION COMPLETE — SUMMARY")
+            self.get_logger().info(f"  Lanes completed : {self.NUM_LANES}")
+            self.get_logger().info(f"  Trees per row   : {self.NUM_TREES_PER_ROW}")
+            self.get_logger().info(f"  Row length      : {self.row_length:.2f}m")
+            self.get_logger().info(f"  Lane width      : {self.LANE_WIDTH:.2f}m")
+            self.get_logger().info(f"  Mission time    : {total:.1f}s")
+            self.get_logger().info("=" * 50)
             return
 
         self.cmd_pub.publish(cmd)
