@@ -31,13 +31,11 @@ class OrchardNavigator(Node):
     Return:   rotate 180° → lane N back → cross → lane N-1 back
               → ... → lane 1 back → AT_HOME
 
-    Return turn logic:
-      On outbound, crossing from lane i to lane i+1:
-        even lane_number → turn RIGHT twice
-        odd  lane_number → turn LEFT  twice
-      On return, the robot faces the OPPOSITE direction.
-      So every turn is the opposite of what outbound does
-      for the same crossing index.
+    Turn logic (outbound AND return):
+      even lane_number → RIGHT (-90°)
+      odd  lane_number → LEFT  (+90°)
+    After 180° rotation at far end, robot faces same direction
+    as the outbound pass for that lane — so turns are identical.
 
     ── Quick-config ───────────────────────────────────────────────────
     NUM_LANES         — how many lanes to cover
@@ -50,11 +48,11 @@ class OrchardNavigator(Node):
     # ── Quick-config ───────────────────────────────────────────────── #
     NUM_LANES         = 2
     NUM_TREES_PER_ROW = 2
-    TREE_SPACING      = 1.0
-    LANE_WIDTH        = 0.75
+    TREE_SPACING      = 0.65
+    LANE_WIDTH        = 0.90
 
     # ── Speeds ────────────────────────────────────────────────────── #
-    FORWARD_SPEED     = 0.08
+    FORWARD_SPEED     = 0.12
     TURN_SPEED        = 0.25
     CROSS_SPEED       = 0.06
 
@@ -83,6 +81,9 @@ class OrchardNavigator(Node):
     # ── Headland geometry ─────────────────────────────────────────── #
     CLEAR_DIST        = 0.30
     TURN_TOLERANCE    = 0.08
+
+    # ── End-of-outbound pause ─────────────────────────────────────── #
+    END_PAUSE_SEC     = 1.5
 
     # ── Coverage ──────────────────────────────────────────────────── #
     ROBOT_WIDTH       = 0.30
@@ -127,6 +128,9 @@ class OrchardNavigator(Node):
         self.state_start_time = self.get_clock().now()
         self.mission_start    = self.get_clock().now()
 
+        # Home heading — recorded on first odom, used for final alignment
+        self.home_yaw         = None
+
         # Lane tracking
         self.lane_number        = 0
         self.lane_heading       = None
@@ -153,6 +157,9 @@ class OrchardNavigator(Node):
         self.nuts_per_lane      = []
         self.nuts_return        = []
         self.total_nuts         = 0
+
+        # Mission done flag — prevents repeated summary logging
+        self.mission_done       = False
 
         # Path
         self.path_msg = Path()
@@ -204,6 +211,13 @@ class OrchardNavigator(Node):
         self.current_yaw = quat_to_yaw(
             p.orientation.x, p.orientation.y,
             p.orientation.z, p.orientation.w)
+
+        # Record home heading on first odom message
+        if self.home_yaw is None:
+            self.home_yaw = self.current_yaw
+            self.get_logger().info(
+                f"Home heading recorded: "
+                f"{math.degrees(self.home_yaw):.1f}deg")
 
         if self.last_x is not None:
             self.total_path_length += math.hypot(
@@ -274,7 +288,8 @@ class OrchardNavigator(Node):
 
     def get_front_stop_dist(self):
         if self.state in {"TURN_INTO_HEADLAND", "TURN_INTO_LANE",
-                          "RETURN_START_ROTATE"}:
+                          "RETURN_START_ROTATE", "END_PAUSE",
+                          "HOME_ALIGN"}:
             return 0.0
         elif self.state in {"CLEAR_TREE", "CROSS_TO_LANE"}:
             return self.FRONT_STOP_CROSS
@@ -400,26 +415,15 @@ class OrchardNavigator(Node):
 
     def get_turn_angle(self):
         """
-        Outbound crossing index = lane_number (0-based).
-        Return  crossing index = return_lane (0-based).
+        Turn direction based purely on lane_number parity.
+        Works identically for outbound and return because after
+        the 180° rotation the robot faces the same direction as
+        the outbound pass for that lane.
 
-        For BOTH, the pattern is:
-          even crossing index → RIGHT (-90°) on OUTBOUND → LEFT (+90°) on RETURN
-          odd  crossing index → LEFT  (+90°) on OUTBOUND → RIGHT(-90°) on RETURN
-
-        Using the crossing index directly (not lane_number during return)
-        ensures the direction is based on which crossing we are on,
-        not which lane we are currently in.
+        even lane_number → RIGHT (-90°)
+        odd  lane_number → LEFT  (+90°)
         """
-        if not self.returning:
-            # Outbound: use lane_number as crossing index
-            return -math.pi / 2 if self.lane_number % 2 == 0 else math.pi / 2
-        else:
-            # Return: use return_lane as crossing index, then negate
-            # return_lane=0 mirrors outbound lane_number=N-1 crossing
-            # The crossing that was RIGHT on outbound is LEFT on return
-            base = -math.pi / 2 if self.return_lane % 2 == 0 else math.pi / 2
-            return -base  # negate = mirror
+        return -math.pi / 2 if self.lane_number % 2 == 0 else math.pi / 2
 
     def record_lane_nuts(self):
         if self.returning:
@@ -478,6 +482,10 @@ class OrchardNavigator(Node):
         if self.num_ranges is None:
             return
 
+        # Mission done — stop firing
+        if self.mission_done:
+            return
+
         cmd = self.create_cmd()
 
         # INIT
@@ -511,13 +519,13 @@ class OrchardNavigator(Node):
 
                 if not self.returning:
                     if self.lane_number >= self.NUM_LANES - 1:
+                        # Outbound done — pause then start return
                         self.returning   = True
                         self.return_lane = 0
                         self.get_logger().info(
-                            "Outbound complete — rotating 180° to start return")
-                        self.turn_target_yaw = self.normalise_yaw(
-                            self.lane_heading + math.pi)
-                        self.set_state("RETURN_START_ROTATE")
+                            f"Outbound complete — pausing "
+                            f"{self.END_PAUSE_SEC}s at far end")
+                        self.set_state("END_PAUSE")
                     else:
                         self.set_state("CLEAR_TREE")
                 else:
@@ -529,7 +537,18 @@ class OrchardNavigator(Node):
 
             self.drive_straight(cmd)
 
-        # RETURN_START_ROTATE
+        # END_PAUSE — stop at far end so audience sees robot reached end
+        elif self.state == "END_PAUSE":
+            self.stop()
+            if self.state_elapsed() >= self.END_PAUSE_SEC:
+                self.get_logger().info(
+                    "Pause complete — rotating 180° to start return")
+                self.turn_target_yaw = self.normalise_yaw(
+                    self.lane_heading + math.pi)
+                self.set_state("RETURN_START_ROTATE")
+            return
+
+        # RETURN_START_ROTATE — rotate 180° in place
         elif self.state == "RETURN_START_ROTATE":
             if self.rotate_to(cmd, self.turn_target_yaw):
                 self.get_logger().info(
@@ -600,18 +619,34 @@ class OrchardNavigator(Node):
                     self.start_lane()
                     self.set_state("FOLLOW_LANE")
 
-        # FINAL_CLEAR
+        # FINAL_CLEAR — short drive past last tree then align home
         elif self.state == "FINAL_CLEAR":
             if self.dist_from(self.headland_start_x,
                               self.headland_start_y) >= self.CLEAR_DIST:
-                self.set_state("AT_HOME")
+                if self.home_yaw is not None:
+                    self.get_logger().info(
+                        f"Aligning to home heading "
+                        f"{math.degrees(self.home_yaw):.1f}deg")
+                    self.set_state("HOME_ALIGN")
+                else:
+                    self.set_state("AT_HOME")
             else:
                 self.drive_straight(cmd, speed=self.CROSS_SPEED)
 
-        # AT_HOME
+        # HOME_ALIGN — rotate to original starting heading
+        elif self.state == "HOME_ALIGN":
+            if self.rotate_to(cmd, self.home_yaw):
+                self.set_state("AT_HOME")
+
+        # AT_HOME — stop, log once, cancel timer
         elif self.state == "AT_HOME":
             self.stop()
-            self.log_summary()
+            if not self.mission_done:
+                self.mission_done = True
+                self.log_summary()
+                self.get_logger().info(
+                    "Node shutting down — mission complete.")
+                self.timer.cancel()
             return
 
         self.cmd_pub.publish(cmd)
